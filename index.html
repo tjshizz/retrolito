@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Tobias & Lynn - Virtueel Kantoor</title>
+  
+  <!-- PWA Meta Tags -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#141824">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="RetroKantoor">
+  <link rel="apple-touch-icon" href="icon-192.png">
+
+  <!-- Tailwind CSS & PeerJS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+
+  <!-- Google Retro Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Space+Grotesk:wght@400;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    * {
+      -webkit-touch-callout: none;
+      -webkit-user-select: none;
+      user-select: none;
+      box-sizing: border-box;
+    }
+    input, textarea {
+      -webkit-user-select: text;
+      user-select: text;
+    }
+    .font-pixel { font-family: 'Press Start 2P', monospace; }
+    .font-ui { font-family: 'Space Grotesk', sans-serif; }
+    
+    canvas {
+      image-rendering: -moz-crisp-edges;
+      image-rendering: -webkit-crisp-edges;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+    }
+
+    .chat-scroll::-webkit-scrollbar { width: 4px; }
+    .chat-scroll::-webkit-scrollbar-thumb { background: #00f5d4; border-radius: 4px; }
+
+    /* Scanline overlay */
+    .scanlines {
+      background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%),
+                  linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03));
+      background-size: 100% 4px, 6px 100%;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body class="bg-[#0b0d14] text-slate-100 min-h-screen flex flex-col items-center justify-start p-2 sm:p-4 font-ui">
+
+  <!-- Top Config & Role Selection Bar -->
+  <div class="w-full max-w-[400px] mb-2 px-1 flex flex-col gap-2">
+    <div class="bg-[#151926] border border-[#2b3044] rounded-2xl p-2.5 flex items-center justify-between shadow-lg">
+      <div class="flex items-center gap-1.5">
+        <span class="text-[9px] font-pixel text-gray-400">IK BEN:</span>
+        <button id="btnTobias" onclick="switchRole('tobias')" class="px-2.5 py-1.5 rounded-lg font-pixel text-[9px] bg-[#00f5d4] text-[#0b0d14] font-bold shadow">
+          Tobias
+        </button>
+        <button id="btnLynn" onclick="switchRole('lynn')" class="px-2.5 py-1.5 rounded-lg font-pixel text-[9px] bg-[#22293d] text-[#f472b6] font-bold">
+          Lynn
+        </button>
+      </div>
+
+      <!-- Status dot -->
+      <div class="flex items-center gap-1.5 bg-[#0e111a] px-2 py-1 rounded-lg border border-[#23293c]">
+        <span id="connDot" class="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse"></span>
+        <span id="connStatus" class="font-pixel text-[8px] text-gray-400">Verbinden...</span>
+      </div>
+    </div>
+
+    <!-- Kamer Code Instelling (zodat jullie een eigen geheime kamer hebben) -->
+    <div class="flex items-center justify-between bg-[#111420] px-3 py-1.5 rounded-xl border border-[#23283b] text-[10px]">
+      <div class="flex items-center gap-2">
+        <span class="font-pixel text-[8px] text-[#00f5d4]">KAMER:</span>
+        <input id="roomInput" type="text" value="ons-kantoor" class="bg-transparent text-white font-pixel text-[9px] w-28 focus:outline-none border-b border-[#00f5d4]/40" />
+      </div>
+      <button onclick="reconnectWithRoom()" class="text-[8px] font-pixel bg-[#1f263c] px-2 py-1 rounded text-gray-300 hover:text-white border border-[#2d3752]">
+        Verbind
+      </button>
+    </div>
+  </div>
+
+  <!-- Mobile Frame Container -->
+  <div class="relative w-full max-w-[400px] bg-[#141824] rounded-[28px] overflow-hidden border-4 border-[#2c3246] shadow-[0_20px_50px_rgba(0,0,0,0.8)] flex flex-col">
+    
+    <!-- Speaker notch -->
+    <div class="w-full flex justify-center pt-2 pb-1 bg-[#1a2030]">
+      <div class="w-20 h-1.5 bg-[#0a0d14] rounded-full"></div>
+    </div>
+
+    <!-- Topbar -->
+    <header class="bg-[#1a2030] px-3 py-2 border-b border-[#293247] flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <span class="w-2 h-2 rounded-full bg-[#00f5d4]"></span>
+        <h1 class="text-[10px] font-pixel text-[#00f5d4]">8-BIT VIRTUEEL KANTOOR</h1>
+      </div>
+      <button id="toggleChatBtn" onclick="toggleChat()" class="text-[9px] font-pixel px-2 py-1 bg-[#00f5d4]/10 border border-[#00f5d4]/40 text-[#00f5d4] rounded">
+        💬 CHAT
+      </button>
+    </header>
+
+    <!-- Canvas Room -->
+    <div class="relative w-full h-[470px] bg-[#0c0e17] overflow-hidden cursor-crosshair" id="stageContainer">
+      <canvas id="gameCanvas" width="380" height="470" class="w-full h-full block"></canvas>
+      <div class="absolute inset-0 scanlines"></div>
+
+      <!-- Quick Walk Toast -->
+      <div id="toastBanner" class="absolute top-2 left-1/2 -translate-x-1/2 bg-black/80 text-[#00f5d4] border border-[#00f5d4]/40 px-3 py-1 rounded-full text-[9px] font-pixel shadow pointer-events-none transition-opacity duration-300 opacity-0">
+        Tik ergens op de vloer!
+      </div>
+
+      <!-- Chat Drawer -->
+      <div id="chatDrawer" class="absolute inset-x-2 bottom-2 bg-[#121624]/95 backdrop-blur-md rounded-2xl border-2 border-[#00f5d4]/60 p-2.5 shadow-2xl transition-all duration-300 flex flex-col gap-2">
+        <div class="flex items-center justify-between pb-1 border-b border-[#252e46]">
+          <span class="text-[9px] font-pixel text-[#00f5d4]" id="chatHeaderTitle">GESPREK: TOBIAS & LYNN</span>
+          <button onclick="toggleChat()" class="text-gray-400 hover:text-white px-1 font-pixel text-xs">✕</button>
+        </div>
+
+        <!-- Chat messages -->
+        <div id="chatLog" class="chat-scroll h-28 overflow-y-auto space-y-1.5 pr-1 text-xs">
+          <div class="p-2 bg-[#1a2133] rounded-lg border-l-2 border-[#00f5d4] text-[11px] text-gray-300">
+            Welkom in jullie virtuele kantoor! Tik op de vloer om rond te lopen en stuur elkaar live berichtjes.
+          </div>
+        </div>
+
+        <!-- Chat input form -->
+        <form id="chatForm" class="flex gap-1.5">
+          <input 
+            id="chatInput" 
+            type="text" 
+            placeholder="Typ een berichtje..."
+            class="flex-1 bg-[#090b12] text-xs text-white px-3 py-2 rounded-xl border border-[#2b334d] focus:border-[#00f5d4] focus:outline-none placeholder:text-gray-500"
+            autocomplete="off"
+          />
+          <button 
+            type="submit" 
+            class="bg-[#00f5d4] hover:bg-[#20f8dd] text-[#090b12] font-pixel text-[9px] px-3.5 py-2 rounded-xl font-bold active:scale-95 transition-transform">
+            STUUR
+          </button>
+        </form>
+      </div>
+
+    </div>
+
+    <!-- Phone Footer info -->
+    <div class="bg-[#121622] py-2 px-3 flex justify-between items-center text-[9px] text-gray-400 border-t border-[#22293d]">
+      <span>Tik op elkaar om hallo te zeggen</span>
+      <span class="font-pixel text-[#00f5d4]">PWA v2.0</span>
+    </div>
+
+  </div>
+
+  <div class="w-full max-w-[400px] mt-2.5 text-center text-[10px] text-gray-400">
+    📱 <b>Installeer als App:</b> Tik in Safari op <i>Deel > Zet op beginscherm</i> of in Chrome op <i>Toevoegen aan startscherm</i>.
+  </div>
+
+  <script>
+    // Register Service Worker for PWA
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js').catch(console.error);
+    }
+
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+
+    // Hotspot zones in the room
+    const ZONES = {
+      DESK: { x: 95, y: 130, name: "Tobias' Desk" },
+      SOFA: { x: 285, y: 130, name: "Lynn's Lounge" },
+      COFFEE: { x: 190, y: 380, name: "Koffiehoek" }
+    };
+
+    // State of both players
+    let myRole = localStorage.getItem("selected_role") || 'tobias';
+    let currentRoom = localStorage.getItem("current_room") || 'ons-kantoor';
+    document.getElementById("roomInput").value = currentRoom;
+
+    const players = {
+      tobias: {
+        id: 'tobias',
+        name: 'Tobias',
+        x: 100,
+        y: 250,
+        targetX: 100,
+        targetY: 250,
+        speed: 130,
+        isMoving: false,
+        direction: 'down',
+        walkCycle: 0,
+        idleTimer: 0,
+        bubble: "Hey Lynn!",
+        bubbleTimer: 6,
+        color: '#00f5d4', // Cyan hoodie
+        hairColor: '#ffbe0b' // Blond
+      },
+      lynn: {
+        id: 'lynn',
+        name: 'Lynn',
+        x: 280,
+        y: 250,
+        targetX: 280,
+        targetY: 250,
+        speed: 130,
+        isMoving: false,
+        direction: 'down',
+        walkCycle: 0,
+        idleTimer: 0,
+        bubble: "Hey Tobias!",
+        bubbleTimer: 6,
+        color: '#f472b6', // Pink hoodie
+        hairColor: '#4a2810' // Brunette
+      }
+    };
+
+    // PeerJS Networking
+    let peer = null;
+    let conn = null;
+    let reconnectTimeout = null;
+
+    function getPeerId(role) {
+      return `pwa-office-${currentRoom.trim().toLowerCase()}-${role}`;
+    }
+
+    function initNetwork() {
+      if (peer) {
+        peer.destroy();
+        peer = null;
+      }
+      conn = null;
+
+      const myId = getPeerId(myRole);
+      const otherRole = myRole === 'tobias' ? 'lynn' : 'tobias';
+      const targetId = getPeerId(otherRole);
+
+      updateConnStatus(false, "Verbinden...");
+
+      peer = new Peer(myId, {
+        debug: 1,
+        config: {
+          iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' }
+          ]
+        }
+      });
+
+      peer.on('open', () => {
+        updateConnStatus(false, "Wachten op " + players[otherRole].name);
+        tryConnect(targetId);
+      });
+
+      peer.on('connection', (incomingConn) => {
+        setupConnection(incomingConn);
+      });
+
+      peer.on('error', (err) => {
+        console.warn("PeerJS melding:", err.type);
+        if (err.type === 'unavailable-id') {
+          // Mogelijk staat de vorige sessie nog 5 sec open in de cloud, probeer opnieuw
+          updateConnStatus(false, "Bezig met herstarten...");
+          setTimeout(initNetwork, 3500);
+        } else {
+          // Periodiek blijven proberen te verbinden met de andere persoon
+          scheduleReconnect();
+        }
+      });
+    }
+
+    function tryConnect(targetId) {
+      if (!peer || conn) return;
+      const c = peer.connect(targetId, { reliable: true });
+      setupConnection(c);
+    }
+
+    function scheduleReconnect() {
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
+      reconnectTimeout = setTimeout(() => {
+        const otherRole = myRole === 'tobias' ? 'lynn' : 'tobias';
+        if (!conn || !conn.open) {
+          tryConnect(getPeerId(otherRole));
+        }
+      }, 4000);
+    }
+
+    function setupConnection(c) {
+      c.on('open', () => {
+        conn = c;
+        const otherRole = myRole === 'tobias' ? 'lynn' : 'tobias';
+        updateConnStatus(true, "Verbonden met " + players[otherRole].name);
+        // Stuur direct mijn positie
+        sendMove(players[myRole].targetX, players[myRole].targetY);
+      });
+
+      c.on('data', (data) => {
+        const otherRole = myRole === 'tobias' ? 'lynn' : 'tobias';
+        if (data.type === 'move') {
+          players[otherRole].targetX = data.x;
+          players[otherRole].targetY = data.y;
+        } else if (data.type === 'chat') {
+          players[otherRole].bubble = data.text;
+          players[otherRole].bubbleTimer = 7;
+          addChatMessage(players[otherRole].name, data.text);
+        }
+      });
+
+      c.on('close', () => {
+        conn = null;
+        updateConnStatus(false, "Verbroken");
+        scheduleReconnect();
+      });
+
+      c.on('error', () => {
+        conn = null;
+        scheduleReconnect();
+      });
+    }
+
+    function sendMove(x, y) {
+      if (conn && conn.open) {
+        conn.send({ type: 'move', x: x, y: y });
+      }
+    }
+
+    function sendChat(text) {
+      if (conn && conn.open) {
+        conn.send({ type: 'chat', text: text });
+      }
+    }
+
+    function updateConnStatus(connected, text) {
+      const dot = document.getElementById("connDot");
+      const label = document.getElementById("connStatus");
+      if (connected) {
+        dot.className = "w-2.5 h-2.5 rounded-full bg-emerald-400";
+        label.className = "font-pixel text-[8px] text-emerald-400";
+      } else {
+        dot.className = "w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse";
+        label.className = "font-pixel text-[8px] text-amber-300";
+      }
+      label.innerText = text;
+    }
+
+    function switchRole(role) {
+      myRole = role;
+      localStorage.setItem("selected_role", role);
+      updateRoleUI();
+      initNetwork();
+    }
+
+    function updateRoleUI() {
+      const isTobias = myRole === 'tobias';
+      document.getElementById("btnTobias").className = isTobias 
+        ? "px-2.5 py-1.5 rounded-lg font-pixel text-[9px] bg-[#00f5d4] text-[#0b0d14] font-bold shadow"
+        : "px-2.5 py-1.5 rounded-lg font-pixel text-[9px] bg-[#22293d] text-gray-400 font-bold";
+
+      document.getElementById("btnLynn").className = !isTobias 
+        ? "px-2.5 py-1.5 rounded-lg font-pixel text-[9px] bg-[#f472b6] text-[#0b0d14] font-bold shadow"
+        : "px-2.5 py-1.5 rounded-lg font-pixel text-[9px] bg-[#22293d] text-gray-400 font-bold";
+    }
+
+    function reconnectWithRoom() {
+      const val = document.getElementById("roomInput").value.trim() || 'ons-kantoor';
+      currentRoom = val;
+      localStorage.setItem("current_room", val);
+      showToast("Kamer ingesteld op: " + currentRoom);
+      initNetwork();
+    }
+
+    // Canvas click / tap to walk
+    canvas.addEventListener("pointerdown", (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      const clickX = (e.clientX - rect.left) * scaleX;
+      const clickY = (e.clientY - rect.top) * scaleY;
+
+      // Check click on the other player to wave
+      const otherRole = myRole === 'tobias' ? 'lynn' : 'tobias';
+      const distOther = Math.hypot(clickX - players[otherRole].x, clickY - players[otherRole].y);
+      if (distOther < 35) {
+        players[myRole].bubble = "👋 Hey daar!";
+        players[myRole].bubbleTimer = 5;
+        sendChat("👋 Hey daar!");
+        addChatMessage(players[myRole].name, "👋 Hey daar!");
+        return;
+      }
+
+      // Clamp walk bounds
+      const targetX = Math.max(30, Math.min(canvas.width - 30, clickX));
+      const targetY = Math.max(50, Math.min(canvas.height - 40, clickY));
+
+      players[myRole].targetX = targetX;
+      players[myRole].targetY = targetY;
+
+      sendMove(targetX, targetY);
+      showToast("Lopen naar positie...");
+    });
+
+    // Chat functionality
+    const chatDrawer = document.getElementById("chatDrawer");
+    const chatForm = document.getElementById("chatForm");
+    const chatInput = document.getElementById("chatInput");
+    const chatLog = document.getElementById("chatLog");
+    const toastBanner = document.getElementById("toastBanner");
+    let isChatOpen = true;
+
+    function toggleChat() {
+      isChatOpen = !isChatOpen;
+      if (isChatOpen) {
+        chatDrawer.classList.remove("translate-y-[120%]", "opacity-0", "pointer-events-none");
+        chatDrawer.classList.add("translate-y-0", "opacity-100");
+      } else {
+        chatDrawer.classList.add("translate-y-[120%]", "opacity-0", "pointer-events-none");
+        chatDrawer.classList.remove("translate-y-0", "opacity-100");
+      }
+    }
+
+    function showToast(msg) {
+      toastBanner.innerText = msg;
+      toastBanner.classList.remove("opacity-0");
+      toastBanner.classList.add("opacity-100");
+      setTimeout(() => {
+        toastBanner.classList.remove("opacity-100");
+        toastBanner.classList.add("opacity-0");
+      }, 1800);
+    }
+
+    chatForm.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const text = chatInput.value.trim();
+      if (!text) return;
+
+      players[myRole].bubble = text;
+      players[myRole].bubbleTimer = 7;
+      addChatMessage(players[myRole].name, text);
+      sendChat(text);
+
+      chatInput.value = "";
+    });
+
+    function addChatMessage(sender, text) {
+      const isMe = sender === players[myRole].name;
+      const bubbleColor = isMe ? players[myRole].color : players[myRole === 'tobias' ? 'lynn' : 'tobias'].color;
+      const div = document.createElement("div");
+      div.className = `p-2 rounded-xl text-xs ${isMe ? 'bg-[#1b253b] border-l-2' : 'bg-[#261c2d] border-l-2'}`;
+      div.style.borderLeftColor = bubbleColor;
+      div.innerHTML = `
+        <span class="font-pixel text-[8px] block mb-0.5" style="color: ${bubbleColor}">${sender}:</span>
+        <span class="text-gray-100">${escapeHtml(text)}</span>
+      `;
+      chatLog.appendChild(div);
+      chatLog.scrollTop = chatLog.scrollHeight;
+    }
+
+    function escapeHtml(t) {
+      return t.replace(/[&<>"']/g, m => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;' }[m]));
+    }
+
+    // --- GAME ENGINE & RENDERING ---
+    let lastTime = performance.now();
+
+    function update(dt) {
+      for (const key in players) {
+        const p = players[key];
+        const dx = p.targetX - p.x;
+        const dy = p.targetY - p.y;
+        const dist = Math.hypot(dx, dy);
+
+        if (dist > 2) {
+          p.isMoving = true;
+          const step = Math.min(dist, p.speed * dt);
+          p.x += (dx / dist) * step;
+          p.y += (dy / dist) * step;
+          p.direction = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up');
+          p.walkCycle += dt * 10;
+        } else {
+          p.x = p.targetX;
+          p.y = p.targetY;
+          p.isMoving = false;
+          p.idleTimer += dt * 3;
+        }
+
+        if (p.bubbleTimer > 0) {
+          p.bubbleTimer -= dt;
+          if (p.bubbleTimer <= 0) p.bubble = "";
+        }
+      }
+    }
+
+    function render() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // 1. Office Floor & Walls
+      drawOfficeRoom();
+
+      // 2. Office Furniture & Zones
+      drawFurniture();
+
+      // 3. Draw Players (depth sorted by Y position)
+      const list = Object.values(players).sort((a, b) => a.y - b.y);
+      for (const p of list) {
+        drawCharacter(p);
+        if (p.bubble) {
+          drawSpeechBubble(p.x, p.y - 32, p.bubble, p.color);
+        }
+      }
+    }
+
+    function drawOfficeRoom() {
+      // Checkerboard Retro Tiles
+      const size = 32;
+      for (let x = 0; x < canvas.width; x += size) {
+        for (let y = 0; y < canvas.height; y += size) {
+          const isEven = ((x / size) + (y / size)) % 2 === 0;
+          ctx.fillStyle = isEven ? "#1c2133" : "#242a42";
+          ctx.fillRect(x, y, size, size);
+          ctx.strokeStyle = "#161926";
+          ctx.lineWidth = 0.5;
+          ctx.strokeRect(x, y, size, size);
+        }
+      }
+
+      // Warm rug in the middle
+      ctx.fillStyle = "#633924";
+      ctx.fillRect(50, 190, 280, 150);
+      ctx.fillStyle = "#78452c";
+      ctx.fillRect(54, 194, 272, 142);
+      ctx.strokeStyle = "#381f13";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(50, 190, 280, 150);
+
+      // Room border wall
+      ctx.strokeStyle = "#3d4766";
+      ctx.lineWidth = 6;
+      ctx.strokeRect(3, 3, canvas.width - 6, canvas.height - 6);
+    }
+
+    function drawFurniture() {
+      // --- Tobias Desk (Top Left) ---
+      const d = ZONES.DESK;
+      ctx.fillStyle = "rgba(0,0,0,0.3)";
+      ctx.fillRect(d.x - 45, d.y - 25, 90, 56);
+      ctx.fillStyle = "#825032";
+      ctx.fillRect(d.x - 46, d.y - 28, 92, 54);
+      ctx.fillStyle = "#a16540";
+      ctx.fillRect(d.x - 42, d.y - 24, 84, 46);
+      ctx.strokeStyle = "#2e190e";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(d.x - 46, d.y - 28, 92, 54);
+
+      // CRT PC & Green screen
+      ctx.fillStyle = "#d0cfc4";
+      ctx.fillRect(d.x - 20, d.y - 20, 40, 26);
+      ctx.fillStyle = "#0c2b18";
+      ctx.fillRect(d.x - 16, d.y - 16, 32, 18);
+      ctx.fillStyle = "#38b764";
+      ctx.fillRect(d.x - 12, d.y - 12, 18, 2);
+      ctx.fillRect(d.x - 12, d.y - 8, 24, 2);
+
+      drawTag(d.x, d.y - 36, "TOBIAS' DESK", "#00f5d4");
+
+      // --- Lynn Lounge Sofa (Top Right) ---
+      const s = ZONES.SOFA;
+      ctx.fillStyle = "rgba(0,0,0,0.3)";
+      ctx.fillRect(s.x - 45, s.y - 25, 90, 56);
+      ctx.fillStyle = "#be185d";
+      ctx.fillRect(s.x - 46, s.y - 26, 92, 52);
+      ctx.fillStyle = "#f472b6";
+      ctx.fillRect(s.x - 42, s.y - 22, 84, 44);
+      ctx.strokeStyle = "#500724";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(s.x - 46, s.y - 26, 92, 52);
+
+      // Pillows
+      ctx.fillStyle = "#fdf2f8";
+      ctx.fillRect(s.x - 38, s.y - 16, 18, 16);
+      ctx.fillRect(s.x + 20, s.y - 16, 18, 16);
+
+      drawTag(s.x, s.y - 36, "LYNN'S SOFA", "#f472b6");
+
+      // --- Coffee Bar (Bottom Center) ---
+      const c = ZONES.COFFEE;
+      ctx.fillStyle = "rgba(0,0,0,0.3)";
+      ctx.beginPath();
+      ctx.arc(c.x, c.y + 4, 32, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = "#475569";
+      ctx.beginPath();
+      ctx.arc(c.x, c.y, 30, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#64748b";
+      ctx.beginPath();
+      ctx.arc(c.x, c.y, 24, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Coffee pot
+      ctx.fillStyle = "#38bdf8";
+      ctx.fillRect(c.x - 6, c.y - 8, 12, 16);
+
+      drawTag(c.x, c.y + 42, "KOFFIEHOEK ☕", "#fbbf24");
+    }
+
+    function drawTag(x, y, text, color) {
+      ctx.save();
+      ctx.font = "7px 'Press Start 2P', monospace";
+      const w = ctx.measureText(text).width + 8;
+      ctx.fillStyle = "#0a0d16";
+      ctx.fillRect(x - w / 2, y - 6, w, 12);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x - w / 2, y - 6, w, 12);
+      ctx.fillStyle = color;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(text, x, y);
+      ctx.restore();
+    }
+
+    function drawCharacter(p) {
+      ctx.save();
+      ctx.translate(p.x, p.y);
+
+      const bobY = p.isMoving ? Math.sin(p.walkCycle * 1.5) * 2.5 : Math.sin(p.idleTimer) * 1.5;
+      const legOffset = p.isMoving ? Math.sin(p.walkCycle) * 4 : 0;
+
+      // Drop shadow
+      ctx.fillStyle = "rgba(0, 0, 0, 0.35)";
+      ctx.beginPath();
+      ctx.ellipse(0, 14, 11, 4.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Shoes
+      ctx.fillStyle = "#0f172a";
+      ctx.fillRect(-8, 10 + legOffset, 6, 6);
+      ctx.fillRect(2, 10 - legOffset, 6, 6);
+
+      // Hoodie / Body
+      ctx.fillStyle = p.color;
+      ctx.fillRect(-12, -2 + bobY, 24, 14);
+      ctx.strokeStyle = "#000000";
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(-12, -2 + bobY, 24, 14);
+
+      // Arms / Hands
+      ctx.fillStyle = p.color;
+      ctx.fillRect(-15, 0 + bobY, 4, 9);
+      ctx.fillRect(11, 0 + bobY, 4, 9);
+      ctx.fillStyle = "#ffccaa";
+      ctx.fillRect(-15, 9 + bobY, 4, 3);
+      ctx.fillRect(11, 9 + bobY, 4, 3);
+
+      // Face
+      ctx.fillStyle = "#ffccaa";
+      ctx.fillRect(-9, -15 + bobY, 18, 14);
+      ctx.strokeStyle = "#000000";
+      ctx.strokeRect(-9, -15 + bobY, 18, 14);
+
+      // Eyes
+      ctx.fillStyle = "#000000";
+      if (p.direction === 'left') {
+        ctx.fillRect(-7, -10 + bobY, 2, 3);
+        ctx.fillRect(-2, -10 + bobY, 2, 3);
+      } else if (p.direction === 'right') {
+        ctx.fillRect(0, -10 + bobY, 2, 3);
+        ctx.fillRect(5, -10 + bobY, 2, 3);
+      } else {
+        ctx.fillRect(-5, -10 + bobY, 2, 3);
+        ctx.fillRect(3, -10 + bobY, 2, 3);
+      }
+
+      // Hair
+      ctx.fillStyle = p.hairColor;
+      ctx.fillRect(-10, -20 + bobY, 20, 7);
+      if (p.id === 'lynn') {
+        // Longer side strands
+        ctx.fillRect(-11, -15 + bobY, 4, 11);
+        ctx.fillRect(7, -15 + bobY, 4, 11);
+      } else {
+        // Short boy tufts
+        ctx.fillRect(-10, -15 + bobY, 3, 5);
+        ctx.fillRect(7, -15 + bobY, 3, 5);
+      }
+      ctx.strokeRect(-10, -20 + bobY, 20, 7);
+
+      // Name indicator badge under feet
+      ctx.font = "8px 'Press Start 2P', monospace";
+      ctx.fillStyle = p.color;
+      ctx.textAlign = "center";
+      ctx.fillText(p.name + (p.id === myRole ? " (Jij)" : ""), 0, 27);
+
+      ctx.restore();
+    }
+
+    function drawSpeechBubble(x, y, text, color) {
+      if (!text) return;
+      ctx.save();
+      ctx.font = "8px 'Press Start 2P', monospace";
+      const w = Math.min(220, ctx.measureText(text).width + 16);
+      const h = 22;
+      const bx = x - w / 2;
+      const by = y - h;
+
+      // Bubble background
+      ctx.fillStyle = "#0c101c";
+      ctx.fillRect(bx, by, w, h);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(bx, by, w, h);
+
+      // Triangle pointer
+      ctx.fillStyle = "#0c101c";
+      ctx.beginPath();
+      ctx.moveTo(x - 4, by + h);
+      ctx.lineTo(x + 4, by + h);
+      ctx.lineTo(x, by + h + 5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = color;
+      ctx.stroke();
+
+      // Text
+      ctx.fillStyle = "#ffffff";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(text, x, by + h / 2, w - 8);
+
+      ctx.restore();
+    }
+
+    function gameLoop(now) {
+      const dt = Math.min(0.1, (now - lastTime) / 1000);
+      lastTime = now;
+      update(dt);
+      render();
+      requestAnimationFrame(gameLoop);
+    }
+
+    // Startup
+    updateRoleUI();
+    initNetwork();
+    requestAnimationFrame((now) => {
+      lastTime = now;
+      gameLoop(now);
+    });
+  </script>
+</body>
+</html>
