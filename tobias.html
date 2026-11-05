@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Tobias - Kantoor</title>
+  
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="screen-orientation" content="portrait">
+  <meta name="theme-color" content="#121624">
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Space+Grotesk:wght@400;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    * {
+      -webkit-touch-callout: none;
+      -webkit-user-select: none;
+      user-select: none;
+      box-sizing: border-box;
+    }
+    input { -webkit-user-select: text; user-select: text; }
+    .font-pixel { font-family: 'Press Start 2P', monospace; }
+    .font-ui { font-family: 'Space Grotesk', sans-serif; }
+    canvas {
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+    }
+    .chat-scroll::-webkit-scrollbar { width: 4px; }
+    .chat-scroll::-webkit-scrollbar-thumb { background: #00f5d4; border-radius: 4px; }
+    .safe-top { padding-top: max(env(safe-area-inset-top), 24px); }
+    .safe-bottom { padding-bottom: max(env(safe-area-inset-bottom), 20px); }
+
+    @media (orientation: landscape) {
+      #landscapeWarning { display: flex !important; }
+    }
+  </style>
+</head>
+<body class="bg-[#0b0d14] text-slate-100 h-screen w-screen flex flex-col justify-between overflow-hidden font-ui safe-top safe-bottom">
+
+  <!-- Landscape slot -->
+  <div id="landscapeWarning" class="fixed inset-0 bg-[#0b0d14] z-50 hidden flex-col items-center justify-center p-6 text-center">
+    <p class="font-pixel text-xs text-[#00f5d4] mb-2">DRAAI JE TELEFOON</p>
+    <p class="text-xs text-gray-400">Deze app is gemaakt voor staande modus (portrait).</p>
+  </div>
+
+  <!-- Header -->
+  <header class="px-4 py-2 flex items-center justify-between border-b border-[#293247] bg-[#141824]/90 backdrop-blur-md shrink-0">
+    <div class="flex items-center gap-2">
+      <span class="w-2.5 h-2.5 rounded-full bg-[#00f5d4]"></span>
+      <h1 class="text-[11px] font-pixel text-[#00f5d4]">TOBIAS</h1>
+    </div>
+    <div class="flex items-center gap-2 bg-[#0e111a] px-2.5 py-1 rounded-full border border-[#2b334d]">
+      <span id="connDot" class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+      <span id="connStatus" class="font-pixel text-[8px] text-amber-300">Lynn zoeken...</span>
+    </div>
+  </header>
+
+  <!-- Canvas Stage -->
+  <main class="relative flex-1 w-full bg-[#0c0e17] overflow-hidden flex items-center justify-center">
+    <canvas id="gameCanvas" width="393" height="580" class="w-full h-full block touch-none"></canvas>
+
+    <!-- Chat Drawer -->
+    <div id="chatDrawer" class="absolute inset-x-3 bottom-3 bg-[#121624]/95 backdrop-blur-md rounded-2xl border border-[#00f5d4]/40 p-2.5 shadow-2xl flex flex-col gap-2">
+      <div class="flex items-center justify-between pb-1 border-b border-[#252e46]">
+        <span class="text-[9px] font-pixel text-[#00f5d4]">CHAT MET LYNN</span>
+        <span class="text-[9px] text-gray-400">Tik vloer = lopen</span>
+      </div>
+
+      <div id="chatLog" class="chat-scroll h-28 overflow-y-auto space-y-1.5 pr-1 text-xs">
+        <div class="p-2 bg-[#172233] rounded-lg border-l-2 border-[#00f5d4] text-[11px] text-gray-300">
+          Hoi Tobias! Je bent ingelogd als Tobias.
+        </div>
+      </div>
+
+      <form id="chatForm" class="flex gap-1.5">
+        <input 
+          id="chatInput" 
+          type="text" 
+          placeholder="Typ berichtje aan Lynn..."
+          class="flex-1 bg-[#090b12] text-xs text-white px-3 py-2 rounded-xl border border-[#2b334d] focus:border-[#00f5d4] focus:outline-none placeholder:text-gray-500"
+          autocomplete="off"
+        />
+        <button 
+          type="submit" 
+          class="bg-[#00f5d4] active:bg-[#20f8dd] text-[#090b12] font-pixel text-[9px] px-3.5 py-2 rounded-xl font-bold active:scale-95 transition-transform">
+          SEND
+        </button>
+      </form>
+    </div>
+  </main>
+
+  <script>
+    const MY_ROLE = 'tobias';
+    const OTHER_ROLE = 'lynn';
+    const ROOM_NAME = 'ons-kantoor';
+
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+
+    const players = {
+      tobias: {
+        id: 'tobias',
+        name: 'Tobias',
+        x: 110,
+        y: 320,
+        targetX: 110,
+        targetY: 320,
+        speed: 130,
+        isMoving: false,
+        direction: 'down',
+        walkCycle: 0,
+        idleTimer: 0,
+        bubble: "Hoi Lynn!",
+        bubbleTimer: 5,
+        color: '#00f5d4',
+        hairColor: '#ffbe0b'
+      },
+      lynn: {
+        id: 'lynn',
+        name: 'Lynn',
+        x: 280,
+        y: 320,
+        targetX: 280,
+        targetY: 320,
+        speed: 130,
+        isMoving: false,
+        direction: 'down',
+        walkCycle: 0,
+        idleTimer: 0,
+        bubble: "",
+        bubbleTimer: 0,
+        color: '#f472b6',
+        hairColor: '#4a2810'
+      }
+    };
+
+    let peer = null;
+    let conn = null;
+
+    function initNetwork() {
+      if (peer) peer.destroy();
+      const myId = `pwa-office-${ROOM_NAME}-${MY_ROLE}`;
+      const targetId = `pwa-office-${ROOM_NAME}-${OTHER_ROLE}`;
+
+      peer = new Peer(myId, {
+        config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }
+      });
+
+      peer.on('open', () => {
+        updateConnStatus(false, "Lynn zoeken...");
+        tryConnect(targetId);
+      });
+
+      peer.on('connection', (incoming) => {
+        setupConnection(incoming);
+      });
+
+      peer.on('error', () => {
+        setTimeout(() => tryConnect(targetId), 3500);
+      });
+    }
+
+    function tryConnect(targetId) {
+      if (!peer || conn) return;
+      const c = peer.connect(targetId, { reliable: true });
+      setupConnection(c);
+    }
+
+    function setupConnection(c) {
+      c.on('open', () => {
+        conn = c;
+        updateConnStatus(true, "Lynn is online!");
+        sendMove(players[MY_ROLE].targetX, players[MY_ROLE].targetY);
+      });
+
+      c.on('data', (data) => {
+        if (data.type === 'move') {
+          players[OTHER_ROLE].targetX = data.x;
+          players[OTHER_ROLE].targetY = data.y;
+        } else if (data.type === 'chat') {
+          players[OTHER_ROLE].bubble = data.text;
+          players[OTHER_ROLE].bubbleTimer = 7;
+          addChatMessage(players[OTHER_ROLE].name, data.text, players[OTHER_ROLE].color);
+        }
+      });
+
+      c.on('close', () => {
+        conn = null;
+        updateConnStatus(false, "Lynn ging weg");
+        setTimeout(initNetwork, 3000);
+      });
+    }
+
+    function sendMove(x, y) {
+      if (conn && conn.open) conn.send({ type: 'move', x, y });
+    }
+
+    function sendChat(text) {
+      if (conn && conn.open) conn.send({ type: 'chat', text });
+    }
+
+    function updateConnStatus(connected, text) {
+      const dot = document.getElementById("connDot");
+      const label = document.getElementById("connStatus");
+      dot.className = `w-2 h-2 rounded-full ${connected ? 'bg-emerald-400' : 'bg-amber-400 animate-pulse'}`;
+      label.className = `font-pixel text-[8px] ${connected ? 'text-emerald-400' : 'text-amber-300'}`;
+      label.innerText = text;
+    }
+
+    canvas.addEventListener("pointerdown", (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      const clickX = (e.clientX - rect.left) * scaleX;
+      const clickY = (e.clientY - rect.top) * scaleY;
+
+      players[MY_ROLE].targetX = Math.max(25, Math.min(canvas.width - 25, clickX));
+      players[MY_ROLE].targetY = Math.max(50, Math.min(canvas.height - 50, clickY));
+      sendMove(players[MY_ROLE].targetX, players[MY_ROLE].targetY);
+    });
+
+    const chatForm = document.getElementById("chatForm");
+    const chatInput = document.getElementById("chatInput");
+    const chatLog = document.getElementById("chatLog");
+
+    chatForm.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const text = chatInput.value.trim();
+      if (!text) return;
+      players[MY_ROLE].bubble = text;
+      players[MY_ROLE].bubbleTimer = 7;
+      addChatMessage(players[MY_ROLE].name, text, players[MY_ROLE].color);
+      sendChat(text);
+      chatInput.value = "";
+    });
+
+    function addChatMessage(sender, text, color) {
+      const div = document.createElement("div");
+      div.className = "p-2 rounded-xl text-xs bg-[#191d2c] border-l-2";
+      div.style.borderLeftColor = color;
+      div.innerHTML = `<span class="font-pixel text-[8px] block mb-0.5" style="color: ${color}">${sender}:</span><span class="text-gray-100">${text}</span>`;
+      chatLog.appendChild(div);
+      chatLog.scrollTop = chatLog.scrollHeight;
+    }
+
+    let lastTime = performance.now();
+    function gameLoop(now) {
+      const dt = Math.min(0.1, (now - lastTime) / 1000);
+      lastTime = now;
+
+      for (const key in players) {
+        const p = players[key];
+        const dx = p.targetX - p.x;
+        const dy = p.targetY - p.y;
+        const dist = Math.hypot(dx, dy);
+
+        if (dist > 2) {
+          p.isMoving = true;
+          const step = Math.min(dist, p.speed * dt);
+          p.x += (dx / dist) * step;
+          p.y += (dy / dist) * step;
+          p.direction = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up');
+          p.walkCycle += dt * 10;
+        } else {
+          p.x = p.targetX;
+          p.y = p.targetY;
+          p.isMoving = false;
+          p.idleTimer += dt * 3;
+        }
+
+        if (p.bubbleTimer > 0) {
+          p.bubbleTimer -= dt;
+          if (p.bubbleTimer <= 0) p.bubble = "";
+        }
+      }
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      const size = 32;
+      for (let x = 0; x < canvas.width; x += size) {
+        for (let y = 0; y < canvas.height; y += size) {
+          ctx.fillStyle = ((x / size) + (y / size)) % 2 === 0 ? "#1c2133" : "#242a42";
+          ctx.fillRect(x, y, size, size);
+        }
+      }
+
+      ctx.fillStyle = "#633924";
+      ctx.fillRect(35, 200, canvas.width - 70, 200);
+      ctx.fillStyle = "#825032";
+      ctx.fillRect(40, 80, 80, 50);
+      ctx.fillStyle = "#be185d";
+      ctx.fillRect(canvas.width - 120, 80, 80, 50);
+
+      const list = Object.values(players).sort((a, b) => a.y - b.y);
+      for (const p of list) {
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        const bob = p.isMoving ? Math.sin(p.walkCycle * 1.5) * 2.5 : Math.sin(p.idleTimer) * 1.5;
+
+        ctx.fillStyle = "rgba(0,0,0,0.35)";
+        ctx.beginPath();
+        ctx.ellipse(0, 14, 11, 4.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "#0f172a";
+        ctx.fillRect(-8, 10, 6, 6);
+        ctx.fillRect(2, 10, 6, 6);
+
+        ctx.fillStyle = p.color;
+        ctx.fillRect(-12, -2 + bob, 24, 14);
+        ctx.fillStyle = "#ffccaa";
+        ctx.fillRect(-9, -15 + bob, 18, 14);
+
+        ctx.fillStyle = "#000";
+        ctx.fillRect(-5, -10 + bob, 2, 3);
+        ctx.fillRect(3, -10 + bob, 2, 3);
+        ctx.fillStyle = p.hairColor;
+        ctx.fillRect(-10, -20 + bob, 20, 7);
+        if (p.id === 'lynn') {
+          ctx.fillRect(-11, -15 + bob, 4, 12);
+          ctx.fillRect(7, -15 + bob, 4, 12);
+        }
+
+        ctx.font = "8px 'Press Start 2P', monospace";
+        ctx.fillStyle = p.color;
+        ctx.textAlign = "center";
+        ctx.fillText(p.name + (p.id === MY_ROLE ? " (Jij)" : ""), 0, 27);
+        ctx.restore();
+
+        if (p.bubble) {
+          ctx.save();
+          ctx.font = "8px 'Press Start 2P', monospace";
+          const w = Math.min(220, ctx.measureText(p.bubble).width + 16);
+          const bx = p.x - w / 2;
+          const by = p.y - 32 - 20;
+          ctx.fillStyle = "#0c101c";
+          ctx.fillRect(bx, by, w, 20);
+          ctx.strokeStyle = p.color;
+          ctx.strokeRect(bx, by, w, 20);
+          ctx.fillStyle = "#fff";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(p.bubble, p.x, by + 10, w - 8);
+          ctx.restore();
+        }
+      }
+
+      requestAnimationFrame(gameLoop);
+    }
+
+    initNetwork();
+    requestAnimationFrame(gameLoop);
+  </script>
+</body>
+</html>

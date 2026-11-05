@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Lynn - Kantoor</title>
+  
+  <!-- iPhone Standalone & Portrait meta tags -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="screen-orientation" content="portrait">
+  <meta name="theme-color" content="#121624">
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Space+Grotesk:wght@400;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    * {
+      -webkit-touch-callout: none;
+      -webkit-user-select: none;
+      user-select: none;
+      box-sizing: border-box;
+    }
+    input { -webkit-user-select: text; user-select: text; }
+    .font-pixel { font-family: 'Press Start 2P', monospace; }
+    .font-ui { font-family: 'Space Grotesk', sans-serif; }
+    canvas {
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+    }
+    .chat-scroll::-webkit-scrollbar { width: 4px; }
+    .chat-scroll::-webkit-scrollbar-thumb { background: #f472b6; border-radius: 4px; }
+
+    /* iPhone 15 Safe Area Insets (Dynamic Island & Home Indicator) */
+    .safe-top { padding-top: max(env(safe-area-inset-top), 44px); }
+    .safe-bottom { padding-bottom: max(env(safe-area-inset-bottom), 24px); }
+
+    /* Forceren portrait container op iPhone 15 schermverhouding */
+    @media (orientation: landscape) {
+      #landscapeWarning { display: flex !important; }
+    }
+  </style>
+</head>
+<body class="bg-[#0b0d14] text-slate-100 h-screen w-screen flex flex-col justify-between overflow-hidden font-ui safe-top safe-bottom">
+
+  <!-- Waarschuwing mocht ze haar telefoon toch draaien -->
+  <div id="landscapeWarning" class="fixed inset-0 bg-[#0b0d14] z-50 hidden flex-col items-center justify-center p-6 text-center">
+    <p class="font-pixel text-xs text-[#f472b6] mb-2">DRAAI JE TELEFOON</p>
+    <p class="text-xs text-gray-400">Deze app is gemaakt voor staande modus (portrait).</p>
+  </div>
+
+  <!-- Header -->
+  <header class="px-4 py-2 flex items-center justify-between border-b border-[#293247] bg-[#141824]/90 backdrop-blur-md shrink-0">
+    <div class="flex items-center gap-2">
+      <span class="w-2.5 h-2.5 rounded-full bg-[#f472b6]"></span>
+      <h1 class="text-[11px] font-pixel text-[#f472b6]">LYNN</h1>
+    </div>
+    <div class="flex items-center gap-2 bg-[#0e111a] px-2.5 py-1 rounded-full border border-[#2b334d]">
+      <span id="connDot" class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+      <span id="connStatus" class="font-pixel text-[8px] text-amber-300">Tobias zoeken...</span>
+    </div>
+  </header>
+
+  <!-- Speelveld op schaal van iPhone 15 (393 breed, langwerpige staande hoogte) -->
+  <main class="relative flex-1 w-full bg-[#0c0e17] overflow-hidden flex items-center justify-center">
+    <canvas id="gameCanvas" width="393" height="580" class="w-full h-full block touch-none"></canvas>
+
+    <!-- Chatvenster onderaan op het scherm -->
+    <div id="chatDrawer" class="absolute inset-x-3 bottom-3 bg-[#121624]/95 backdrop-blur-md rounded-2xl border border-[#f472b6]/40 p-2.5 shadow-2xl flex flex-col gap-2">
+      <div class="flex items-center justify-between pb-1 border-b border-[#252e46]">
+        <span class="text-[9px] font-pixel text-[#f472b6]">CHAT MET TOBIAS</span>
+        <span class="text-[9px] text-gray-400">Tik vloer = lopen</span>
+      </div>
+
+      <div id="chatLog" class="chat-scroll h-28 overflow-y-auto space-y-1.5 pr-1 text-xs">
+        <div class="p-2 bg-[#1f192b] rounded-lg border-l-2 border-[#f472b6] text-[11px] text-gray-300">
+          Hoi Lynn! Je bent ingelogd. Zodra Tobias zijn app opent, staat hij naast je.
+        </div>
+      </div>
+
+      <form id="chatForm" class="flex gap-1.5">
+        <input 
+          id="chatInput" 
+          type="text" 
+          placeholder="Typ berichtje aan Tobias..."
+          class="flex-1 bg-[#090b12] text-xs text-white px-3 py-2 rounded-xl border border-[#2b334d] focus:border-[#f472b6] focus:outline-none placeholder:text-gray-500"
+          autocomplete="off"
+        />
+        <button 
+          type="submit" 
+          class="bg-[#f472b6] active:bg-[#f687c3] text-[#0b
